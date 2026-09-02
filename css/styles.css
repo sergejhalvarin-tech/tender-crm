@@ -169,3 +169,34 @@ a:hover{text-decoration:underline}
   .hamburger{display:block}
   .kpi-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 }
+
+/* admin: финансовая модель (из Excel) */
+.fm-inp{background:#2b2a17;border-color:#6b6120;color:#ffe98a}
+.fm-inp:focus{border-color:#ffd166;background:#332f18}
+.fm-checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:5px 14px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line2)}
+.fm-check{font-size:12px;padding:3px 8px;border-radius:6px}
+.fm-check.ok{color:var(--green)}
+.fm-check.warn{color:var(--yellow);background:rgba(255,209,102,.08)}
+.fm-check.bad{color:var(--red);background:rgba(255,92,108,.08)}
+.fm-hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:6px}
+.fm-hero-item{background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:12px 14px}
+.fm-big{font-size:19px;font-weight:800;margin:3px 0;font-variant-numeric:tabular-nums}
+.fm-big.plan{color:var(--green)}
+.fm-big .sep{color:var(--mut2);font-weight:400;margin:0 3px}
+.fm-uzkoe{font-size:16px;font-weight:800;margin:2px 0}
+.fm-uzkoe.warn{color:var(--orange)}
+.fm-uzkoe.bad{color:var(--red)}
+.fm-goal{margin-top:14px;padding:11px 15px;border-radius:10px;font-weight:600;font-size:13.5px}
+.fm-goal.ok{background:rgba(46,204,113,.12);border:1px solid rgba(46,204,113,.35);color:var(--green)}
+.fm-goal.bad{background:rgba(255,92,108,.1);border:1px solid rgba(255,92,108,.35);color:var(--red)}
+.fm-table th,.fm-table td{white-space:nowrap}
+.fm-table .fm-label{position:sticky;left:0;background:var(--panel);font-size:12px;color:var(--mut);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;z-index:1}
+.fm-table thead th{position:sticky;top:0;z-index:2}
+.fm-decomp td.num{font-size:12px}
+tr.fm-sc-row.sel td{background:rgba(79,140,255,.1)}
+.fm-sc-row.sel .badge-best{vertical-align:middle}
+.fm-bad-cell{background:rgba(255,92,108,.16)!important}
+.fm-wd{background:var(--bg);color:var(--yellow);min-width:0}
+.fm-wd.bad{border-color:var(--red);color:var(--red)}
+.fm-wd-row td{background:rgba(255,209,102,.05)}
+.kpi .k-val{font-variant-numeric:tabular-nums}

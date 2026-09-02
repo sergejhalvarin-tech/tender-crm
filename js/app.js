@@ -53,7 +53,7 @@ const App = {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     const titles = {
       dashboard: 'Дашборд', purchases: 'Реестр закупок',
-      purchase: 'Карточка закупки', settings: 'Настройки', about: 'Инструкция'
+      purchase: 'Карточка закупки', settings: 'Настройки', finmodel: '🧮 Финмодель (админ)', about: 'Инструкция'
     };
     this.el('pageTitle').textContent = titles[view] || '—';
     this.el('topbarRight').innerHTML = '';
@@ -62,6 +62,7 @@ const App = {
       purchases: () => this.renderRegistry(),
       purchase: () => this.renderPurchaseEditor(),
       settings: () => this.renderSettings(),
+      finmodel: () => this.renderFmodel(),
       about: () => this.renderAbout(),
     };
     (renderers[view] || this.renderDashboard).call(this);
@@ -511,6 +512,226 @@ const App = {
         Store.resetAll(); UI.toast('Данные сброшены', 'warn'); this.nav('dashboard');
       });
     };
+  },
+
+  /* ============ ФИНМОДЕЛЬ (АДМИН) ============ */
+  numFmt(v) {
+    if (v == null || isNaN(v)) return '—';
+    return Number.isInteger(Math.round(v * 1e6) / 1e6) ? fmt(v, 0) : fmt(v, 1);
+  },
+
+  renderFmodel() {
+    const f = Store.fmodel();
+    const i = f.inputs;
+    const cur = FModelCalc.current();
+    const checks = FModelCalc.checks();
+    const hasBad = checks.some(c => !c.ok && !c.warn);
+
+    let h = `<div class="card"><h3>🧮 Финансовая модель бизнеса
+      <span class="hint">для администратора · точные формулы из «tender_model_calc.xlsx»</span></h3>
+      <div class="mut2" style="font-size:12.5px;margin-bottom:12px;line-height:1.55">
+        Расчёт дохода, загрузки оборотки и декомпозиция на 12 месяцев. Меняйте жёлтые поля — всё пересчитается автоматически,
+        как в Excel (листы: Исходные данные / Сценарии / Декомпозиция 12 мес / Методика).</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" id="fmReset">⟲ Сбросить к значениям Excel</button>
+        <button class="btn btn-ghost btn-sm" id="fmGoCalc">🧮 Открыть калькулятор закупки</button>
+      </div>
+    </div>`;
+
+    /* ---------- 1. Вводные данные ---------- */
+    h += `<div class="card"><h3>1️⃣ Вводные данные
+      <span class="hint">жёлтые поля — как в Excel (только их и меняете)</span></h3>
+      <div class="grid grid-3">` +
+      this.fmField('fm-oborotka', i.oborotka, 'Оборотка (свободные средства для тендеров), ₽', '2 500 000', 100000) +
+      this.fmField('fm-chasyNaZayavku', i.chasyNaZayavku, 'Часов на просчёт и подачу ОДНОЙ заявки', '2') +
+      this.fmField('fm-chasyVDen', i.chasyVDen, 'Часов в день на просчёты и подачи', '2') +
+      this.fmField('fm-chek', i.chek, 'Средний чек контракта (фактический), ₽', '300 000', 10000) +
+      this.fmField('fm-marzhaMin', i.marzhaMin, 'МИНИМАЛЬНАЯ чистая маржа с тендера, %', '10', 1) +
+      this.fmField('fm-marzhaPlan', i.marzhaPlan, 'Плановая маржа для прогноза, %', '15', 1) +
+      this.fmField('fm-marzhaMax', i.marzhaMax, 'МАКСИМАЛЬНАЯ чистая маржа с тендера, %', '20', 1) +
+      this.fmField('fm-konzav', i.konvZayavkaPobeda, 'Конверсия: заявка → победа, %', '50', 5) +
+      this.fmField('fm-konvpk', i.konvPobedaKontrakt, 'Конверсия: победа → подписание контракта, %', '50', 5) +
+      this.fmField('fm-rabDney', i.rabDney, 'Рабочих дней в месяц', '22') +
+      this.fmField('fm-oborach', i.oborachivaemost, 'Оборачиваемость оборотки, раз в месяц', '1,5', 0.5) +
+      this.fmField('fm-temp', i.tempRosta, 'Темп роста среднего чека, % в месяц', '10', 1) +
+      this.fmField('fm-cel', i.celMes, '🎯 ЦЕЛЬ: сколько хотим чистыми в месяц, ₽', '60 000', 5000) +
+      `</div>
+      <div class="fm-checks">` + checks.map(c =>
+        `<div class="fm-check ${c.ok ? 'ok' : (c.warn ? 'warn' : 'bad')}">${c.ok ? '✓' : (c.warn ? '⚠' : '✕')} ${esc(c.label)}${c.ok ? '' : ' <span class="mut2">— ' + esc(c.err) + '</span>'}</div>`
+      ).join('') + `</div>
+      ${hasBad ? '<div class="mut2" style="font-size:12px;margin-top:8px">Исправьте красные проверки — расчёт ниже может быть некорректен.</div>' : ''}
+    </div>`;
+
+    /* ---------- 2. Результаты сейчас ---------- */
+    h += `<div class="card"><h3>2️⃣ Результаты — точка старта (месяц 1)</h3>
+      <div class="kpi-grid">` +
+      this.fmKpi('Идеальный средний чек', fmtMoney(cur.idealChek), 'blue', '1/5 оборотки — защита от риска') +
+      this.fmKpi('Заявок можно в день', this.numFmt(cur.zayavokVDen), '', 'часы в день ÷ часы на 1 заявку') +
+      this.fmKpi('Выигрышей в день', this.numFmt(cur.vyigryshVDen), '', 'с конверсией заявка → победа') +
+      this.fmKpi('Контрактов/мес — ВРЕМЯ', this.numFmt(cur.kontrVremya), 'blue', 'потолок количества сделок') +
+      this.fmKpi('Контрактов/мес — ДЕНЬГИ', this.numFmt(cur.kontrDeneg), '', 'оборотка × оборачиваемость ÷ чек') +
+      this.fmKpi('Контрактов реально', this.numFmt(cur.kontrReal), cur.uzkoe === 'ВРЕМЯ' ? 'orange' : 'red', 'МИН(время; деньги)') +
+      `</div>
+      <div class="fm-hero">
+        <div class="fm-hero-item"><div class="k-label">Узкое место (ограничитель)</div>
+          <div class="fm-uzkoe ${cur.uzkoe === 'ВРЕМЯ' ? 'warn' : 'bad'}">${cur.uzkoe === 'ВРЕМЯ' ? '⏱ ВРЕМЯ — мало заявок' : '💰 ДЕНЬГИ — мало оборотки'}</div>
+          <div class="field-hint">Время — добавляйте часы/делегируйте. Деньги — наращивайте оборотку или берите крупнее чеки.</div></div>
+        <div class="fm-hero-item"><div class="k-label">Прибыль с 1 контракта (мин / план / макс)</div>
+          <div class="fm-big">${fmtMoney(Math.round(cur.pribKontr.min))} <span class="sep">·</span> ${fmtMoney(Math.round(cur.pribKontr.plan))} <span class="sep">·</span> ${fmtMoney(Math.round(cur.pribKontr.max))}</div></div>
+        <div class="fm-hero-item"><div class="k-label">Прибыль в МЕСЯЦ (мин / план / макс)</div>
+          <div class="fm-big plan">${fmtMoney(Math.round(cur.pribMes.min))} <span class="sep">·</span> ${fmtMoney(Math.round(cur.pribMes.plan))} <span class="sep">·</span> ${fmtMoney(Math.round(cur.pribMes.max))}</div>
+          <div class="field-hint">контрактов реально × чек × маржа</div></div>
+        <div class="fm-hero-item"><div class="k-label">Прирост оборотки за месяц (план / макс)</div>
+          <div class="fm-big">${fmtPct(cur.rostPlanPct)} <span class="sep">·</span> ${fmtPct(cur.rostMaxPct)}</div>
+          <div class="field-hint">при полном реинвесте прибыли</div></div>
+      </div>
+      <div class="fm-goal ${cur.celRealna ? 'ok' : 'bad'}">${cur.celRealna
+        ? '🎯 Цель ' + fmtMoney(i.celMes) + '/мес — РЕАЛЬНА (в пределах максимума ' + fmtMoney(Math.round(cur.pribMes.max)) + ')'
+        : '🎯 Цель ' + fmtMoney(i.celMes) + '/мес — ВЫШЕ максимума (' + fmtMoney(Math.round(cur.pribMes.max)) + '). Увеличьте часы/чек или снизьте цель.'}</div>
+    </div>`;
+
+    /* ---------- 3. Сценарии ---------- */
+    h += `<div class="card"><h3>3️⃣ Сценарии развития <span class="hint">точка старта, месяц 1 — клик по строке = выбор для декомпозиции</span></h3>
+      <div class="table-wrap"><table class="fm-table">
+        <thead><tr><th></th><th>Сценарий</th><th class="num">Чек старт, ₽</th><th class="num">Часов/день</th>
+          <th class="num">Заявок/день</th><th class="num">Контр./мес (время)</th><th class="num">Контр./мес (деньги)</th>
+          <th>Узкое место</th><th class="num">Прибыль/мес МИН</th><th class="num">Прибыль/мес ПЛАН</th><th class="num">Прибыль/мес МАКС</th>
+          <th class="num">Рост оборотки МАКС</th></tr></thead><tbody>` +
+      FModelCalc.scenarioDefs().map(sc => {
+        const c = FModelCalc.scenarioCalc(sc);
+        const sel = f.scenario === sc.id;
+        return `<tr class="fm-sc-row ${sel ? 'sel' : ''}" data-sc="${sc.id}" style="cursor:pointer">
+          <td>${sel ? '●' : '○'}</td>
+          <td><b>${sel ? '▸ ' : ''}${sc.id}. ${esc(sc.name)}</b>${sel ? ' <span class="badge-best">выбран</span>' : ''}</td>
+          <td class="num">${fmt(sc.chekStart, 0)}</td>
+          <td class="num">${sc.chasy}</td>
+          <td class="num">${this.numFmt(c.zayavki)}</td>
+          <td class="num">${this.numFmt(c.kontrVremya)}</td>
+          <td class="num">${this.numFmt(c.kontrDeneg)}</td>
+          <td>${c.uzkoe === 'Время' ? '<span class="pill pill-calc">Время</span>' : '<span class="pill pill-lose">Деньги</span>'}</td>
+          <td class="num mut">${fmtMoney(Math.round(c.pribMes.min))}</td>
+          <td class="num" style="color:var(--green);font-weight:700">${fmtMoney(Math.round(c.pribMes.plan))}</td>
+          <td class="num">${fmtMoney(Math.round(c.pribMes.max))}</td>
+          <td class="num">${fmtPct(c.rostMaxPct)}</td></tr>`;
+      }).join('') +
+      `</tbody></table></div>
+      <div class="mut2" style="font-size:12px;margin-top:10px;line-height:1.6">
+        • Все сценарии на старте упираются во ВРЕМЯ — денег хватает на больше контрактов, чем вы успеваете.<br>
+        • С ростом оборотки чек автоматически укрупняется (см. декомпозицию) — прибыль растёт даже без увеличения часов.<br>
+        • Чтобы росло и КОЛИЧЕСТВО сделок — сценарий 3 (4 ч/день) или делегирование помощнику.</div>
+    </div>`;
+
+    /* ---------- 4. Декомпозиция ---------- */
+    const d = FModelCalc.months(f.scenario);
+    const last = d.rows[11];
+    h += `<div class="card"><h3>4️⃣ Декомпозиция на 12 месяцев — рост оборотки, чека и прибыли
+      <span class="hint">сценарий: ${esc(d.scenario.name)}</span></h3>
+      <div class="filters" style="margin-bottom:12px">
+        <label style="margin:0">Сценарий для прогноза:</label>
+        <select id="fmScenario" style="width:auto">
+          ${FModelCalc.scenarioDefs().map(sc => `<option value="${sc.id}" ${f.scenario === sc.id ? 'selected' : ''}>${sc.id}. ${esc(sc.name)}</option>`).join('')}
+        </select>
+        <span class="mut2" style="font-size:12px">Вывод на личные нужды заполняйте в жёлтой строке — всё остальное считается само.</span>
+      </div>
+      <div class="table-wrap"><table class="fm-table fm-decomp">
+        <thead><tr><th>Показатель</th>${d.rows.map(r => `<th class="num">Мес ${r.m + 1}</th>`).join('')}</tr></thead><tbody>` +
+      this.fmRow('Оборотка на начало месяца, ₽', d.rows, r => fmtMoney(Math.round(r.oborotka))) +
+      this.fmRow('Часы в день', d.rows, r => fmt(r.chasy)) +
+      this.fmRow('Заявок в день', d.rows, r => this.numFmt(r.zayavki)) +
+      this.fmRow('Лимит ВРЕМЕНИ: контрактов/мес', d.rows, r => this.numFmt(r.kontrVremya)) +
+      `<tr><td class="fm-label">Средний чек месяца, ₽ <span class="mut2">(растёт)</span></td>` + d.rows.map(r => `<td class="num">${fmtMoney(Math.round(r.chek))}</td>`).join('') + `</tr>` +
+      this.fmRow('Лимит ДЕНЕГ: контрактов/мес', d.rows, r => this.numFmt(r.kontrDeneg)) +
+      `<tr><td class="fm-label">Контрактов реально, шт</td>` + d.rows.map(r => `<td class="num" style="font-weight:700;color:var(--acc2)">${this.numFmt(r.kontr)}</td>`).join('') + `</tr>` +
+      this.fmRow('Объём продаж за месяц, ₽', d.rows, r => fmtMoney(Math.round(r.obem))) +
+      `<tr><td class="fm-label">Прибыль за месяц (план. маржа), ₽</td>` + d.rows.map(r => `<td class="num pos" style="font-weight:700">${fmtMoney(Math.round(r.pribyl))}</td>`).join('') + `</tr>` +
+      `<tr class="fm-wd-row"><td class="fm-label">Вывод на личные нужды, ₽ <span class="mut2">(ввод)</span></td>` + d.rows.map(r =>
+        `<td class="num" style="padding:4px 5px"><input type="number" class="fm-wd ${r.warn ? 'bad' : ''}" data-m="${r.m}" value="${f.withdraw[r.m] ? f.withdraw[r.m] : ''}" placeholder="0" style="width:92px"></td>`).join('') + `</tr>` +
+      this.fmRow('Оборотка на КОНЕЦ месяца, ₽', d.rows, r => fmtMoney(Math.round(r.konec)), r => r.konec < r.oborotka) +
+      this.fmRow('Прирост оборотки за месяц, %', d.rows, r => fmtPct(r.rostPct)) +
+      this.fmRow('Прибыль НАКОПИТЕЛЬНО, ₽', d.rows, r => fmtMoney(Math.round(r.pribNak)), null, 'pos') +
+      this.fmRow('Вывод НАКОПИТЕЛЬНО, ₽', d.rows, r => fmtMoney(Math.round(r.vyvNak))) +
+      `<tr><td class="fm-label">Проверка (вывод ≤ прибыль)</td>` + d.rows.map(r =>
+        `<td class="num ${r.warn ? 'neg' : 'pos'}" style="font-weight:700">${r.warn ? '⚠ вывод > прибыль' : '✓ OK'}</td>`).join('') + `</tr>` +
+      `</tbody></table></div>
+      <div class="kpi-grid" style="margin-top:14px">` +
+      this.fmKpi('Прибыль за 12 мес (накоп.)', fmtMoney(Math.round(last.pribNak)), 'green', 'плановая маржа, вывод не учтён') +
+      this.fmKpi('Вывод за 12 мес', fmtMoney(Math.round(last.vyvNak)), 'orange', 'на личные нужды') +
+      this.fmKpi('Оборотка на конец года', fmtMoney(Math.round(last.konec)), 'blue', 'старт: ' + fmtMoney(Math.round(d.rows[0].oborotka))) +
+      this.fmKpi('Рост оборотки за год', fmtPct(d.rows[0].oborotka > 0 ? (last.konec - d.rows[0].oborotka) / d.rows[0].oborotka * 100 : 0), 'blue', 'при выводе 0 — полный реинвест') +
+      `</div>
+    </div>`;
+
+    /* ---------- 5. Методика ---------- */
+    h += `<div class="card guide"><h3 style="margin:0 0 10px">5️⃣ Методика расчёта и формулы</h3>
+      <ol style="padding-left:20px">${FModelCalc.methodic.map(t => `<li style="margin-bottom:6px;color:#c6d2e8">${esc(t)}</li>`).join('')}</ol>
+      <div class="mut2" style="font-size:12px;margin-top:8px">Источник: лист «Методика и формулы» файла tender_model_calc.xlsx. Модель самодостаточна: менять нужно только вводные (блок 1), выводы на личные нужды (строка в блоке 4) и сценарий прогноза.</div>
+    </div>`;
+
+    this.viewEl().innerHTML = h;
+    this.bindFmodel();
+  },
+
+  fmField(id, val, label, ph, step) {
+    return `<div class="form-row"><label>${label}</label>
+      <input type="number" class="fm-inp" id="${id}" value="${val == null ? '' : val}" placeholder="${ph}" step="${step != null ? step : 1}" min="0">
+      <div class="field-hint" style="min-height:15px"></div></div>`;
+  },
+
+  fmKpi(l, v, cls, sub) {
+    return `<div class="kpi ${cls}"><div class="k-label">${l}</div><div class="k-val" style="font-size:17px">${v}</div>${sub ? `<div class="k-sub">${sub}</div>` : ''}</div>`;
+  },
+
+  fmRow(label, rows, fn, badFn, extraCls) {
+    return `<tr><td class="fm-label">${label}</td>` + rows.map(r =>
+      `<td class="num ${badFn && badFn(r) ? 'fm-bad-cell' : ''} ${extraCls || ''}">${fn(r)}</td>`).join('') + `</tr>`;
+  },
+
+  bindFmodel() {
+    // жёлтые вводные: сохраняем по onchange (уход с поля / Enter), чтобы не терять фокус
+    const keys = {
+      'fm-oborotka': 'oborotka', 'fm-chasyNaZayavku': 'chasyNaZayavku', 'fm-chasyVDen': 'chasyVDen',
+      'fm-chek': 'chek', 'fm-marzhaMin': 'marzhaMin', 'fm-marzhaPlan': 'marzhaPlan', 'fm-marzhaMax': 'marzhaMax',
+      'fm-konzav': 'konvZayavkaPobeda', 'fm-konvpk': 'konvPobedaKontrakt', 'fm-rabDney': 'rabDney',
+      'fm-oborach': 'oborachivaemost', 'fm-temp': 'tempRosta', 'fm-cel': 'celMes',
+    };
+    Object.keys(keys).forEach(id => {
+      const el = this.el(id);
+      if (!el) return;
+      const save = () => {
+        Store.updateFmodelInputs({ [keys[id]]: el.value === '' ? 0 : +el.value });
+        UI.toast('Модель пересчитана', 'ok', 1200);
+        this.renderFmodel();
+      };
+      el.onchange = save;
+      el.onkeydown = e => { if (e.key === 'Enter') { el.blur(); } };
+    });
+    // выбор сценария
+    const scSel = this.el('fmScenario');
+    if (scSel) scSel.onchange = () => { Store.setScenario(+scSel.value); this.renderFmodel(); };
+    this.viewEl().querySelectorAll('.fm-sc-row').forEach(tr => tr.onclick = () => {
+      Store.setScenario(+tr.dataset.sc);
+      this.renderFmodel();
+    });
+    // вывод на личные нужды
+    this.viewEl().querySelectorAll('.fm-wd').forEach(inp => {
+      const save = () => {
+        Store.setWithdraw(+inp.dataset.m, +inp.value || 0);
+        this.renderFmodel();
+      };
+      inp.onchange = save;
+      inp.onkeydown = e => { if (e.key === 'Enter') inp.blur(); };
+    });
+    // кнопки
+    const r = this.el('fmReset');
+    if (r) r.onclick = () => {
+      UI.confirm('Сбросить финмодель?', 'Все вводные, сценарий и выводы вернутся к значениям из Excel (оборотка 2,5 млн, чек 300 тыс., маржа 10–20%, цель 60 тыс.).', () => {
+        Store.resetFmodel();
+        UI.toast('Модель сброшена к Excel', 'ok');
+        this.renderFmodel();
+      });
+    };
+    const gc = this.el('fmGoCalc');
+    if (gc) gc.onclick = () => this.nav('purchase');
   },
 
   /* ============ ИНСТРУКЦИЯ ============ */
