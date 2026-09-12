@@ -447,12 +447,15 @@ const FModelCalc = {
       const kontr = Math.min(kontrVremya, kontrDeneg);
       const obem = kontr * chek;
       const pribyl = obem * plan;
-      const vyvod = (+wd[m]) || 0;
+      // «Вывод»: если ячейка не задана (null/undefined/''), используется ЦЕЛЬ из вводных
+      const raw = wd[m];
+      const isFromGoal = (raw == null || raw === '' || +raw === 0);
+      const vyvod = isFromGoal ? (+i.celMes || 0) : (+raw || 0);
       const konec = oborotka + pribyl - vyvod;
       pribNak += pribyl; vyvNak += vyvod;
       rows.push({
         m, oborotka, chasy: sc.chasy, zayavki, kontrVremya, chek, kontrDeneg, kontr,
-        obem, pribyl, vyvod, konec,
+        obem, pribyl, vyvod, vyvodFromGoal: isFromGoal, konec,
         rostPct: oborotka > 0 ? pribyl / oborotka * 100 : 0,
         pribNak, vyvNak, warn: vyvod > pribyl,
       });

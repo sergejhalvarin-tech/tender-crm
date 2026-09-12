@@ -40,11 +40,11 @@ tr:hover td{background:rgba(79,140,255,.05)}
 .view-container{padding:20px 22px 40px;max-width:1500px;width:100%}
 
 /* cards */
-.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
-.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between;min-height:96px;position:relative;overflow:hidden}
-.kpi .k-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);font-weight:600;line-height:1.3}
-.kpi .k-val{font-size:22px;font-weight:700;line-height:1.1;margin:6px 0;font-variant-numeric:tabular-nums}
-.kpi .k-sub{font-size:11px;color:var(--mut2);line-height:1.3}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:1fr;gap:10px;margin-bottom:16px;align-items:stretch}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:grid;grid-template-rows:auto 1fr auto;min-height:100px;position:relative;overflow:hidden}
+.kpi .k-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);font-weight:600;line-height:1.3;min-height:26px;display:flex;align-items:flex-start}
+.kpi .k-val{font-size:22px;font-weight:700;line-height:1.2;margin:0;font-variant-numeric:tabular-nums;display:flex;align-items:center}
+.kpi .k-sub{font-size:11px;color:var(--mut2);line-height:1.3;min-height:14px}
 .kpi.green .k-val{color:var(--green)}
 .kpi.blue .k-val{color:var(--acc2)}
 .kpi.orange .k-val{color:var(--orange)}
@@ -271,11 +271,14 @@ tr.fm-sc-row.sel td{background:rgba(79,140,255,.1)}
 .fm-bad-cell{background:rgba(255,92,108,.16)!important}
 .fm-wd{background:var(--bg);color:var(--yellow);min-width:0}
 .fm-wd.bad{border-color:var(--red);color:var(--red)}
+.fm-wd.from-goal{color:var(--mut2);border-style:dashed}
+.fm-wd.from-goal::placeholder{color:var(--mut2);opacity:.9}
 .fm-wd-row td{background:rgba(255,209,102,.05)}
 .kpi .k-val{font-variant-numeric:tabular-nums}
 
 /* ============ ANALYTICS MODULE — STRICT LAYOUT ============ */
-.analytics-hero{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);border-left:3px solid var(--acc);padding:18px 22px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px}
+.analytics-hero{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);border-left:3px solid var(--acc);padding:18px 22px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:nowrap;gap:14px}
+.analytics-hero .ah-left{flex:1;min-width:0}
 .analytics-hero h2{font-size:16px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.5px}
 .analytics-hero .mut{font-size:12px;margin-top:4px;color:var(--mut)}
 .ah-stats{display:flex;gap:8px}

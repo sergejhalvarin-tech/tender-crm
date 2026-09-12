@@ -569,7 +569,7 @@ const App = {
       this.fmField('fm-rabDney', i.rabDney, 'Рабочих дней в месяц', '22') +
       this.fmField('fm-oborach', i.oborachivaemost, 'Оборачиваемость оборотки, раз в месяц', '1,5', 0.5) +
       this.fmField('fm-temp', i.tempRosta, 'Темп роста среднего чека, % в месяц', '10', 1) +
-      this.fmField('fm-cel', i.celMes, '🎯 ЦЕЛЬ: сколько хотим чистыми в месяц, ₽', '60 000', 5000) +
+      this.fmField('fm-cel', i.celMes, '🎯 ЦЕЛЬ: сколько хотим чистыми в месяц, ₽ (= Вывод в декомпозиции)', '60 000', 5000) +
       `</div>
       <div class="fm-checks">` + checks.map(c =>
         `<div class="fm-check ${c.ok ? 'ok' : (c.warn ? 'warn' : 'bad')}">${c.ok ? '✓' : (c.warn ? '⚠' : '✕')} ${esc(c.label)}${c.ok ? '' : ' <span class="mut2">— ' + esc(c.err) + '</span>'}</div>`
@@ -659,8 +659,8 @@ const App = {
       `<tr><td class="fm-label">Контрактов реально, шт</td>` + d.rows.map(r => `<td class="num" style="font-weight:700;color:var(--acc2)">${this.numFmt(r.kontr)}</td>`).join('') + `</tr>` +
       this.fmRow('Объём продаж за месяц, ₽', d.rows, r => fmtMoney(Math.round(r.obem))) +
       `<tr><td class="fm-label">Прибыль за месяц (план. маржа), ₽</td>` + d.rows.map(r => `<td class="num pos" style="font-weight:700">${fmtMoney(Math.round(r.pribyl))}</td>`).join('') + `</tr>` +
-      `<tr class="fm-wd-row"><td class="fm-label">Вывод на личные нужды, ₽ <span class="mut2">(ввод)</span></td>` + d.rows.map(r =>
-        `<td class="num" style="padding:4px 5px"><input type="number" class="fm-wd ${r.warn ? 'bad' : ''}" data-m="${r.m}" value="${f.withdraw[r.m] ? f.withdraw[r.m] : ''}" placeholder="0" style="width:92px"></td>`).join('') + `</tr>` +
+      `<tr class="fm-wd-row"><td class="fm-label">Вывод на личные нужды, ₽ <span class="mut2">(пусто = ЦЕЛЬ ${fmtMoney(i.celMes)})</span></td>` + d.rows.map(r =>
+        `<td class="num" style="padding:4px 5px"><input type="number" class="fm-wd ${r.warn ? 'bad' : ''} ${r.vyvodFromGoal ? 'from-goal' : ''}" data-m="${r.m}" value="${f.withdraw[r.m] ? f.withdraw[r.m] : ''}" placeholder="${fmt(i.celMes)}" title="${r.vyvodFromGoal ? 'Используется ЦЕЛЬ из вводных: ' + fmtMoney(i.celMes) : 'Ручное значение'}" style="width:96px"></td>`).join('') + `</tr>` +
       this.fmRow('Оборотка на КОНЕЦ месяца, ₽', d.rows, r => fmtMoney(Math.round(r.konec)), r => r.konec < r.oborotka) +
       this.fmRow('Прирост оборотки за месяц, %', d.rows, r => fmtPct(r.rostPct)) +
       this.fmRow('Прибыль НАКОПИТЕЛЬНО, ₽', d.rows, r => fmtMoney(Math.round(r.pribNak)), null, 'pos') +
