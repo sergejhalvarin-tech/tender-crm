@@ -53,7 +53,7 @@ const App = {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     const titles = {
       dashboard: 'Дашборд', purchases: 'Реестр закупок',
-      purchase: 'Карточка закупки', settings: 'Настройки', finmodel: '🧮 Финмодель (админ)', about: 'Инструкция'
+      purchase: 'Карточка закупки', analytics: '🔬 Аналитика', settings: 'Настройки', finmodel: '🧮 Финмодель (админ)', about: 'Инструкция'
     };
     this.el('pageTitle').textContent = titles[view] || '—';
     this.el('topbarRight').innerHTML = '';
@@ -61,6 +61,7 @@ const App = {
       dashboard: () => this.renderDashboard(),
       purchases: () => this.renderRegistry(),
       purchase: () => this.renderPurchaseEditor(),
+      analytics: () => this.renderAnalytics(),
       settings: () => this.renderSettings(),
       finmodel: () => this.renderFmodel(),
       about: () => this.renderAbout(),
@@ -732,6 +733,282 @@ const App = {
     };
     const gc = this.el('fmGoCalc');
     if (gc) gc.onclick = () => this.nav('purchase');
+  },
+
+  /* ============ АНАЛИТИКА (Математический движок) ============ */
+  renderAnalytics() {
+    const purchases = Store.purchases();
+    const portfolio = MathEngine.portfolioAnalysis(purchases, Store.fmodel().inputs);
+    const b = portfolio.bayesian;
+    const rar = portfolio.rar;
+    const varM = portfolio.var;
+    const mc = portfolio.monteCarlo;
+    const hhi = portfolio.hhi;
+    const settings = Store.settings();
+    const fmInputs = Store.fmodel().inputs;
+
+    let h = '';
+
+    /* ── HEADER ── */
+    h += `<div class="analytics-hero">
+      <div class="ah-left">
+        <h2>Математическая аналитика портфеля</h2>
+        <p class="mut">Байесовский вывод · Теория аукционов · Критерий Келли · Монте-Карло · Портфельная теория</p>
+      </div>
+      <div class="ah-stats">
+        <span class="ah-stat"><b>${portfolio.counts.active}</b> активных</span>
+        <span class="ah-stat"><b>${portfolio.counts.won}</b> побед</span>
+        <span class="ah-stat"><b>${portfolio.counts.lost}</b> проигрышей</span>
+      </div>
+    </div>`;
+
+    /* ── 1. БАЙЕСОВСКАЯ ВЕРОЯТНОСТЬ ── */
+    h += `<div class="card an-card">
+      <div class="an-card-head">
+        <h3>📐 Байесовская оценка вероятности победы</h3>
+        <span class="an-formula">Beta(α=${b.alpha}, β=${b.beta}) posterior</span>
+      </div>
+      <div class="an-formula-block">
+        <div class="an-formula-tex">P(win | data) = (wins + α₀) / (n + α₀ + β₀)</div>
+        <div class="an-formula-desc">Prior: Beta(1,1) — uninformative. Posterior update по историческим данным.</div>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi blue"><div class="k-label">Апостериорная P(win)</div>
+          <div class="k-val">${fmtPct(b.mean * 100)}</div>
+          <div class="k-sub">среднее Beta-распределения</div></div>
+        <div class="kpi"><div class="k-label">95% доверительный интервал</div>
+          <div class="k-val" style="font-size:18px">${fmtPct(b.ci95Low * 100)} — ${fmtPct(b.ci95High * 100)}</div>
+          <div class="k-sub">credible interval</div></div>
+        <div class="kpi"><div class="k-label">Стандартное отклонение</div>
+          <div class="k-val">${(b.std * 100).toFixed(2)}%</div>
+          <div class="k-sub">неопределённость оценки</div></div>
+        <div class="kpi ${b.n >= 20 ? 'green' : b.n >= 5 ? 'orange' : 'red'}">
+          <div class="k-label">Качество оценки</div>
+          <div class="k-val">${b.n >= 20 ? 'Высокое' : b.n >= 5 ? 'Среднее' : 'Мало данных'}</div>
+          <div class="k-sub">n = ${b.n} наблюдений</div></div>
+      </div>
+      ${b.n < 5 ? '<div class="an-warning">⚠ Менее 5 завершённых тендеров — байесовская оценка ненадёжна, доминирует prior. Продолжайте накапливать данные.</div>' : ''}
+    </div>`;
+
+    /* ── 2. RISK-ADJUSTED METRICS ── */
+    h += `<div class="card an-card">
+      <div class="an-card-head">
+        <h3>📊 Risk-Adjusted метрики портфеля</h3>
+        <span class="an-formula">Sharpe-ratio аналог + VaR</span>
+      </div>
+      <div class="an-formula-block">
+        <div class="an-formula-tex">RAR = μ(profit) / σ(profit)&emsp;|&emsp;VaR<sub>α</sub> = μ − z<sub>α</sub> × σ&emsp;|&emsp;CV = σ / |μ|</div>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi ${rar.rar > 1 ? 'green' : rar.rar > 0.5 ? 'blue' : 'orange'}">
+          <div class="k-label">Risk-Adjusted Return</div>
+          <div class="k-val">${rar.rar === Infinity ? '∞' : rar.rar.toFixed(2)}</div>
+          <div class="k-sub">Sharpe-ratio: > 1 = отлично</div></div>
+        <div class="kpi green"><div class="k-label">Средняя ЧП на сделку</div>
+          <div class="k-val">${fmtMoney(rar.mean)}</div>
+          <div class="k-sub">μ по выигранным</div></div>
+        <div class="kpi"><div class="k-label">Волатильность (σ)</div>
+          <div class="k-val">${fmtMoney(rar.std)}</div>
+          <div class="k-sub">разброс прибыли</div></div>
+        <div class="kpi"><div class="k-label">Коэф. вариации (CV)</div>
+          <div class="k-val">${(rar.cv * 100).toFixed(1)}%</div>
+          <div class="k-sub">${rar.cv < 0.3 ? 'стабильно' : rar.cv < 0.7 ? 'средне' : 'нестабильно'}</div></div>
+        <div class="kpi ${varM.var95 >= 0 ? 'green' : 'red'}"><div class="k-label">VaR 95%</div>
+          <div class="k-val">${fmtMoney(varM.var95)}</div>
+          <div class="k-sub">мин. прибыль в 95% случаев</div></div>
+        <div class="kpi ${varM.var99 >= 0 ? 'green' : 'red'}"><div class="k-label">VaR 99%</div>
+          <div class="k-val">${fmtMoney(varM.var99)}</div>
+          <div class="k-sub">worst case (1%)</div></div>
+        <div class="kpi green"><div class="k-label">Совокупная ЧП</div>
+          <div class="k-val">${fmtMoney(portfolio.totalProfit)}</div>
+          <div class="k-sub">всего выиграно</div></div>
+        <div class="kpi blue"><div class="k-label">Загрузка оборотки</div>
+          <div class="k-val">${portfolio.capitalUtilization.toFixed(1)}%</div>
+          <div class="k-sub">${portfolio.capitalUtilization > 80 ? '⚠ высокая' : portfolio.capitalUtilization > 50 ? 'умеренная' : 'низкая'}</div></div>
+      </div>
+    </div>`;
+
+    /* ── 3. MONTE CARLO ── */
+    h += `<div class="card an-card">
+      <div class="an-card-head">
+        <h3>🎲 Монте-Карло симуляция</h3>
+        <span class="an-formula">N=3000 итераций, нормальное распределение</span>
+      </div>
+      <div class="an-formula-block">
+        <div class="an-formula-tex">Profit<sub>total</sub> = Σ<sub>i=1..k</sub> N(μ, σ²)&emsp;|&emsp;k = активные × P(win)</div>
+        <div class="an-formula-desc">Прогноз совокупной прибыли по текущему портфелю с учётом вероятности и разброса.</div>
+      </div>`;
+
+    if (mc) {
+      h += `<div class="kpi-grid">
+        <div class="kpi red"><div class="k-label">P5 (пессимист)</div>
+          <div class="k-val">${fmtMoney(mc.p5)}</div>
+          <div class="k-sub">хуже в 5% случаев</div></div>
+        <div class="kpi orange"><div class="k-label">P25</div>
+          <div class="k-val">${fmtMoney(mc.p25)}</div>
+          <div class="k-sub">нижний квартиль</div></div>
+        <div class="kpi blue"><div class="k-label">P50 (медиана)</div>
+          <div class="k-val">${fmtMoney(mc.p50)}</div>
+          <div class="k-sub">центральный сценарий</div></div>
+        <div class="kpi green"><div class="k-label">P75</div>
+          <div class="k-val">${fmtMoney(mc.p75)}</div>
+          <div class="k-sub">верхний квартиль</div></div>
+        <div class="kpi green"><div class="k-label">P95 (оптимист)</div>
+          <div class="k-val">${fmtMoney(mc.p95)}</div>
+          <div class="k-sub">лучше в 5% случаев</div></div>
+        <div class="kpi ${mc.probPositive >= 80 ? 'green' : mc.probPositive >= 50 ? 'orange' : 'red'}">
+          <div class="k-label">P(profit > 0)</div>
+          <div class="k-val">${mc.probPositive.toFixed(1)}%</div>
+          <div class="k-sub">вероятность прибыли</div></div>
+      </div>
+      <div class="an-mc-bar">
+        <div class="an-mc-zone red" style="width:5%"><span>P5</span></div>
+        <div class="an-mc-zone orange" style="width:20%"><span>P25</span></div>
+        <div class="an-mc-zone blue" style="width:25%"><span>P50</span></div>
+        <div class="an-mc-zone green" style="width:25%"><span>P75</span></div>
+        <div class="an-mc-zone green2" style="width:25%"><span>P95</span></div>
+      </div>`;
+    } else {
+      h += `<div class="an-warning">Нужно минимум 3 завершённые сделки (ПОБЕДА) для запуска симуляции.</div>`;
+    }
+    h += `</div>`;
+
+    /* ── 4. СКОРИНГ АКТИВНЫХ ТЕНДЕРОВ ── */
+    const active = purchases.filter(p => ['work', 'calc', 'sent'].includes(p.status));
+    h += `<div class="card an-card">
+      <div class="an-card-head">
+        <h3>🎯 Скоринг активных тендеров</h3>
+        <span class="an-formula">Многокритериальная модель: маржа × EMV × P(win) × капитал</span>
+      </div>
+      <div class="an-formula-block">
+        <div class="an-formula-tex">Score = Σ w<sub>i</sub> × norm(x<sub>i</sub>)&emsp;|&emsp;EMV = P(win) × Profit − P(lose) × Cost</div>
+        <div class="an-formula-desc">Веса: маржа 25%, вероятность 25%, EMV 20%, эффективность капитала 15%, диверсификация 15%.</div>
+      </div>`;
+
+    if (active.length) {
+      h += `<div class="table-wrap"><table>
+        <thead><tr>
+          <th>Заказчик</th><th class="num">НМЦК</th><th class="num">Маржа</th>
+          <th class="num">EMV</th><th class="num">Kelly f*</th>
+          <th class="num">Опт. цена (Nash)</th><th class="num">Break-even</th>
+          <th class="num">Score</th><th>Грейд</th><th>Решение</th>
+        </tr></thead><tbody>`;
+
+      active.forEach(p => {
+        const nmck = Calc.nmck(p);
+        const marzha = Calc.marzha(p);
+        const zakupka = Calc.zakupka(p);
+        const score = MathEngine.scoreTender(p, fmInputs, b.mean);
+        const kelly = MathEngine.kelly(b.mean, marzha.rub, zakupka * 0.02);
+        const optBid = MathEngine.optimalBid(nmck, zakupka, 5);
+        const be = MathEngine.breakEven(zakupka, +p.logistics || 0, settings.tarif, settings.rezerv, settings.nalog + settings.prochie);
+
+        h += `<tr>
+          <td style="max-width:200px"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            ${esc(p.customer || '—')}</div></td>
+          <td class="money">${fmtMoney(nmck)}</td>
+          <td class="money ${marzha.rub >= 0 ? 'pos' : 'neg'}">${fmtPct(marzha.pct)}</td>
+          <td class="money ${score.emv >= 0 ? 'pos' : 'neg'}">${fmtMoney(score.emv)}</td>
+          <td class="num">${(kelly.half * 100).toFixed(1)}%</td>
+          <td class="money">${fmtMoney(optBid.optimalPrice)}<br><span class="mut2" style="font-size:10px">−${optBid.snizhenieOtNmck.toFixed(1)}%</span></td>
+          <td class="money mut">${fmtMoney(be.minPrice)}</td>
+          <td class="num" style="font-weight:700;font-size:16px">${score.total}</td>
+          <td><span class="pill pill-grade-${score.grade.toLowerCase()}">${score.grade}</span></td>
+          <td><span class="pill ${score.total >= 50 ? 'pill-win' : 'pill-lose'}">${score.recommendation}</span></td>
+        </tr>`;
+      });
+
+      h += `</tbody></table></div>`;
+    } else {
+      h += `<div class="empty"><div class="big">🎯</div>Нет активных тендеров для скоринга</div>`;
+    }
+    h += `</div>`;
+
+    /* ── 5. ТЕОРИЯ АУКЦИОНОВ ── */
+    h += `<div class="card an-card">
+      <div class="an-card-head">
+        <h3>🏛 Теория аукционов — Nash Equilibrium</h3>
+        <span class="an-formula">First-Price Sealed-Bid (FPSB)</span>
+      </div>
+      <div class="an-formula-block">
+        <div class="an-formula-tex">b*(v) = zakupka + (НМЦК − zakupka) × (n − 1) / n</div>
+        <div class="an-formula-desc">Равновесная стратегия Нэша для аукциона первой цены с n участниками и равномерным распределением оценок. При n → ∞ оптимальная ставка → НМЦК (полная конкуренция, нулевая прибыль).</div>
+      </div>
+      <div class="an-theory-grid">
+        <div class="an-theory-card">
+          <h4>Revenue Equivalence Theorem</h4>
+          <p>При стандартных условиях (независимые частные оценки, нейтральность к риску) все стандартные форматы аукционов дают одинаковую ожидаемую выручку продавцу.</p>
+          <div class="an-formula-tex" style="font-size:12px;margin-top:8px">E[Revenue<sub>FPSB</sub>] = E[Revenue<sub>Vickrey</sub>] = (n−1)/(n+1) × v<sub>max</sub></div>
+        </div>
+        <div class="an-theory-card">
+          <h4>Winner's Curse Correction</h4>
+          <p>В common-value аукционах (когда реальная стоимость общая, но оценки зашумлены), победитель склонен переплачивать. Коррекция:</p>
+          <div class="an-formula-tex" style="font-size:12px;margin-top:8px">b<sub>adj</sub> = b* − E[max ε<sub>i</sub> | win] ≈ b* − σ × √(2 ln n)</div>
+        </div>
+        <div class="an-theory-card">
+          <h4>Критерий Келли (оптимальный размер ставки)</h4>
+          <p>Максимизация долгосрочного роста капитала. Fractional Kelly (½) снижает волатильность при сохранении ~75% ожидаемого роста.</p>
+          <div class="an-formula-tex" style="font-size:12px;margin-top:8px">f* = (b × p − q) / b&emsp;|&emsp;b = profit/loss, p = P(win)</div>
+        </div>
+        <div class="an-theory-card">
+          <h4>PERT-оценка сроков поставки</h4>
+          <p>Трёхточечная экспертная оценка. Модель Beta-PERT используется для оценки рисков срыва сроков.</p>
+          <div class="an-formula-tex" style="font-size:12px;margin-top:8px">E = (O + 4M + P) / 6&emsp;|&emsp;σ = (P − O) / 6</div>
+        </div>
+      </div>
+    </div>`;
+
+    /* ── 6. SUPPLIER DIVERSIFICATION ── */
+    h += `<div class="card an-card">
+      <div class="an-card-head">
+        <h3>🏭 Диверсификация поставщиков</h3>
+        <span class="an-formula">Herfindahl–Hirschman Index</span>
+      </div>
+      <div class="an-formula-block">
+        <div class="an-formula-tex">HHI = Σ s<sub>i</sub>²&emsp;|&emsp;s<sub>i</sub> = V<sub>i</sub> / V<sub>total</sub>&emsp;|&emsp;HHI* = (HHI − 1/n) / (1 − 1/n)</div>
+        <div class="an-formula-desc">HHI → 0 = высокая диверсификация (множество равных поставщиков). HHI → 1 = монополия (один поставщик). Нормализованный HHI* корректирует на число поставщиков.</div>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi ${hhi.diversified ? 'green' : 'orange'}"><div class="k-label">HHI</div>
+          <div class="k-val">${(hhi.hhi * 10000).toFixed(0)}</div>
+          <div class="k-sub">шкала 0–10000</div></div>
+        <div class="kpi"><div class="k-label">Диверсификация</div>
+          <div class="k-val">${hhi.label}</div>
+          <div class="k-sub">${hhi.n} поставщик(ов)</div></div>
+        <div class="kpi"><div class="k-label">HHI* (нормализованный)</div>
+          <div class="k-val">${(hhi.hhiNorm * 100).toFixed(1)}%</div>
+          <div class="k-sub">0% = полная диверс.</div></div>
+      </div>
+    </div>`;
+
+    /* ── 7. СПРАВОЧНИК ФОРМУЛ ── */
+    h += `<div class="card an-card guide">
+      <h3 style="margin:0 0 14px">📚 Математический аппарат — справочник</h3>
+      <div class="an-ref-grid">
+        ${this._mathRef('Байесовский вывод', 'P(θ|D) = P(D|θ)·P(θ) / P(D)', 'Обновление убеждений на основе данных. Prior → Posterior через Likelihood. Используется Beta-Binomial модель для конверсий.')}
+        ${this._mathRef('Expected Monetary Value', 'EMV = Σ P(s_i) × V(s_i)', 'Математическое ожидание прибыли с учётом всех сценариев (победа, проигрыш, отмена). Основа теории принятия решений.')}
+        ${this._mathRef('Критерий Келли', 'f* = (bp − q) / b', 'Оптимальная доля капитала для максимизации геометрического среднего доходности (log-utility). Доказан Келли (1956) в Bell Labs.')}
+        ${this._mathRef('Nash Equilibrium (FPSB)', 'b*(v) = v − (v−r)/n', 'Стратегия равновесия в аукционе первой цены. Каждый участник занижает ставку на величину, обратно пропорциональную числу конкурентов.')}
+        ${this._mathRef('Value at Risk', 'VaR_α = μ − z_α × σ', 'Максимальный убыток на заданном доверительном уровне. Параметрический метод (предпосылка нормальности).')}
+        ${this._mathRef('Herfindahl–Hirschman Index', 'HHI = Σ s_i²', 'Мера концентрации рынка/поставщиков. Используется ФАС, DOJ, EU Commission для антимонопольного анализа.')}
+        ${this._mathRef('PERT (Program Evaluation)', 'E = (O + 4M + P) / 6', 'Взвешенная оценка по Beta-распределению с модой на наиболее вероятное значение. Разработана ВМС США (1958).')}
+        ${this._mathRef('Монте-Карло метод', 'X̄ = (1/N) Σ f(ξ_i)', 'Стохастическая симуляция: генерация N реализаций случайного процесса для оценки распределения результата. Метрополис, Улам (1949).')}
+        ${this._mathRef('Sharpe Ratio', 'S = (R_p − R_f) / σ_p', 'Отношение премии за риск к волатильности. > 1 = хорошо, > 2 = отлично. Уильям Шарп, нобелевский лауреат (1990).')}
+        ${this._mathRef('Revenue Equivalence', 'E[R_1] = E[R_2] = ... = E[R_k]', 'Теорема Викри (нобелевский лауреат 1996): все стандартные аукционы эквивалентны по ожидаемой выручке при IPV.')}
+        ${this._mathRef('Coefficient of Variation', 'CV = σ / μ', 'Безразмерная мера вариабельности. Позволяет сравнивать разброс цен поставщиков между позициями разного масштаба.')}
+        ${this._mathRef('Break-Even Analysis', 'P_min = C / (1−t−r)', 'Минимальная цена контракта при нулевой прибыли. C = себестоимость, t = тариф площадки, r = резерв.')}
+      </div>
+    </div>`;
+
+    this.viewEl().innerHTML = h;
+  },
+
+  _mathRef(title, formula, desc) {
+    return `<div class="an-ref-item">
+      <div class="an-ref-title">${title}</div>
+      <div class="an-formula-tex">${formula}</div>
+      <div class="an-ref-desc">${desc}</div>
+    </div>`;
   },
 
   /* ============ ИНСТРУКЦИЯ ============ */
