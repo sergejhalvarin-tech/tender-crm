@@ -141,7 +141,7 @@ const MathEngine = {
      Normalized HHI* = (HHI − 1/n) / (1 − 1/n) */
   hhi(volumes) {
     const total = volumes.reduce((a, b) => a + b, 0);
-    if (total <= 0 || volumes.length <= 1) return { hhi: 1, hhiNorm: 1, n: volumes.length, diversified: false };
+    if (total <= 0 || volumes.length <= 1) return { hhi: 1, hhiNorm: 1, n: volumes.length, diversified: false, label: 'Нет данных' };
     const shares = volumes.map(v => v / total);
     const hhi = shares.reduce((s, sh) => s + sh * sh, 0);
     const n = volumes.length;

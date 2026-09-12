@@ -174,7 +174,7 @@ const App = {
     });
 
     const agg = Calc.aggregates(purchases);
-    const h = `<div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+    const h = `<div class="kpi-grid">
       ${[['Всего', fmt(agg.cnt)], ['НМЦК', fmtMoney(agg.sumNmck)], ['Побед', fmt(agg.wins)], ['ЧП', fmtMoney(agg.sumChp)]]
         .map(x => `<div class="kpi"><div class="k-label">${x[0]}</div><div class="k-val" style="font-size:17px">${x[1]}</div></div>`).join('')}
     </div>
