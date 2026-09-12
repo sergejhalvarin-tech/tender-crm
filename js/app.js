@@ -14,12 +14,20 @@ const App = {
 
   bindGlobal() {
     document.querySelectorAll('.nav-item').forEach(btn => {
-      btn.onclick = () => this.nav(btn.dataset.view);
+      btn.onclick = () => { this.nav(btn.dataset.view); this.closeSidebarOnMobile(); };
     });
     this.el('btnMenu').onclick = () => {
       const sb = this.el('sidebar');
       sb.classList.toggle('open');
+      document.body.classList.toggle('sb-open', sb.classList.contains('open'));
     };
+    // клик по затемнённому фону вне сайдбара — закрывает
+    document.addEventListener('click', (e) => {
+      const sb = this.el('sidebar');
+      if (!sb.classList.contains('open')) return;
+      if (sb.contains(e.target) || this.el('btnMenu').contains(e.target)) return;
+      this.closeSidebarOnMobile();
+    });
     this.el('modalClose').onclick = () => UI.closeModal();
     this.el('modalOverlay').onclick = (e) => { if (e.target === e.currentTarget) UI.closeModal(); };
 
@@ -47,6 +55,12 @@ const App = {
 
   el(id) { return document.getElementById(id); },
   viewEl() { return this.el('viewContainer'); },
+  closeSidebarOnMobile() {
+    if (window.matchMedia('(max-width: 820px)').matches) {
+      this.el('sidebar').classList.remove('open');
+      document.body.classList.remove('sb-open');
+    }
+  },
 
   nav(view) {
     this.state.view = view;
