@@ -638,15 +638,19 @@ const App = {
 
     /* ---------- 4. Декомпозиция ---------- */
     const d = FModelCalc.months(f.scenario);
-    const last = d.rows[11];
-    h += `<div class="card"><h3>4️⃣ Декомпозиция на 12 месяцев — рост оборотки, чека и прибыли
+    const last = d.rows[d.rows.length - 1];
+    const monthsCount = d.rows.length;
+    h += `<div class="card"><h3>4️⃣ Декомпозиция на ${monthsCount} мес — рост оборотки, чека и прибыли
       <span class="hint">сценарий: ${esc(d.scenario.name)}</span></h3>
       <div class="filters" style="margin-bottom:12px">
-        <label style="margin:0">Сценарий для прогноза:</label>
+        <label style="margin:0;min-height:auto">Сценарий для прогноза:</label>
         <select id="fmScenario" style="width:auto">
           ${FModelCalc.scenarioDefs().map(sc => `<option value="${sc.id}" ${f.scenario === sc.id ? 'selected' : ''}>${sc.id}. ${esc(sc.name)}</option>`).join('')}
         </select>
-        <span class="mut2" style="font-size:12px">Вывод на личные нужды заполняйте в жёлтой строке — всё остальное считается само.</span>
+        <span style="flex:1"></span>
+        <button class="btn btn-ghost btn-sm" id="fmMonthRemove" ${monthsCount <= 1 ? 'disabled' : ''}>− месяц</button>
+        <span style="font-size:12px;color:var(--mut);padding:0 6px">${monthsCount} мес</span>
+        <button class="btn btn-sm" id="fmMonthAdd" ${monthsCount >= 60 ? 'disabled' : ''}>+ месяц</button>
       </div>
       <div class="table-wrap"><table class="fm-table fm-decomp">
         <thead><tr><th>Показатель</th>${d.rows.map(r => `<th class="num">Мес ${r.m + 1}</th>`).join('')}</tr></thead><tbody>` +
@@ -669,10 +673,10 @@ const App = {
         `<td class="num ${r.warn ? 'neg' : 'pos'}" style="font-weight:700">${r.warn ? '⚠ вывод > прибыль' : '✓ OK'}</td>`).join('') + `</tr>` +
       `</tbody></table></div>
       <div class="kpi-grid" style="margin-top:14px">` +
-      this.fmKpi('Прибыль за 12 мес (накоп.)', fmtMoney(Math.round(last.pribNak)), 'green', 'плановая маржа, вывод не учтён') +
-      this.fmKpi('Вывод за 12 мес', fmtMoney(Math.round(last.vyvNak)), 'orange', 'на личные нужды') +
-      this.fmKpi('Оборотка на конец года', fmtMoney(Math.round(last.konec)), 'blue', 'старт: ' + fmtMoney(Math.round(d.rows[0].oborotka))) +
-      this.fmKpi('Рост оборотки за год', fmtPct(d.rows[0].oborotka > 0 ? (last.konec - d.rows[0].oborotka) / d.rows[0].oborotka * 100 : 0), 'blue', 'при выводе 0 — полный реинвест') +
+      this.fmKpi(`Прибыль за ${monthsCount} мес (накоп.)`, fmtMoney(Math.round(last.pribNak)), 'green', 'плановая маржа, вывод не учтён') +
+      this.fmKpi(`Вывод за ${monthsCount} мес`, fmtMoney(Math.round(last.vyvNak)), 'orange', 'на личные нужды') +
+      this.fmKpi(`Оборотка на конец ${monthsCount === 12 ? 'года' : 'периода'}`, fmtMoney(Math.round(last.konec)), 'blue', 'старт: ' + fmtMoney(Math.round(d.rows[0].oborotka))) +
+      this.fmKpi(`Рост оборотки за ${monthsCount} мес`, fmtPct(d.rows[0].oborotka > 0 ? (last.konec - d.rows[0].oborotka) / d.rows[0].oborotka * 100 : 0), 'blue', 'при выводе 0 — полный реинвест') +
       `</div>
     </div>`;
 
@@ -747,6 +751,15 @@ const App = {
     };
     const gc = this.el('fmGoCalc');
     if (gc) gc.onclick = () => this.nav('purchase');
+    const addBtn = this.el('fmMonthAdd');
+    if (addBtn) addBtn.onclick = () => {
+      if (Store.addMonth()) { UI.toast('Месяц добавлен'); this.renderFmodel(); }
+      else UI.toast('Максимум 60 месяцев', 'warn');
+    };
+    const rmBtn = this.el('fmMonthRemove');
+    if (rmBtn) rmBtn.onclick = () => {
+      if (Store.removeMonth()) { UI.toast('Месяц удалён', 'warn'); this.renderFmodel(); }
+    };
   },
 
   /* ============ АНАЛИТИКА (Математический движок) ============ */

@@ -42,6 +42,7 @@ const DEFAULT_FMODEL = () => ({
     celMes: 60000,          // ЦЕЛЬ: сколько хотим чистыми в месяц, руб
   },
   scenario: 1,              // 1-Базовый / 2-Крупный чек / 3-Больше участий
+  months: 12,               // количество месяцев в декомпозиции (можно добавлять/убирать)
   withdraw: [0,0,0,0,0,0,0,0,0,0,0,0], // вывод на личные нужды по месяцам, руб
 });
 
@@ -107,8 +108,12 @@ const Store = {
 
     if (!this._data.fmodel || typeof this._data.fmodel !== 'object') this._data.fmodel = DEFAULT_FMODEL();
     this._data.fmodel.inputs = Object.assign({}, DEFAULT_FMODEL().inputs, this._data.fmodel.inputs || {});
+    if (!this._data.fmodel.months || this._data.fmodel.months < 1) this._data.fmodel.months = 12;
+    if (this._data.fmodel.months > 60) this._data.fmodel.months = 60;
     const _wd = this._data.fmodel.withdraw;
-    if (!Array.isArray(_wd) || _wd.length !== 12) this._data.fmodel.withdraw = DEFAULT_FMODEL().withdraw.slice();
+    if (!Array.isArray(_wd)) this._data.fmodel.withdraw = [];
+    // подгоняем массив вывода под текущее число месяцев
+    while (this._data.fmodel.withdraw.length < this._data.fmodel.months) this._data.fmodel.withdraw.push(0);
     return this._data;
   },
   data() { return this._data || this.load(); },
@@ -190,8 +195,25 @@ const Store = {
   updateFmodelInputs(patch) { Object.assign(this.fmodel().inputs, patch); this.save(); },
   setWithdraw(monthIdx, val) { this.fmodel().withdraw[monthIdx] = +val || 0; this.save(); },
   setScenario(id) { this.fmodel().scenario = +id; this.save(); },
+  addMonth() {
+    const f = this.fmodel();
+    if (f.months >= 60) return false;
+    f.months++;
+    while (f.withdraw.length < f.months) f.withdraw.push(0);
+    this.save();
+    return true;
+  },
+  removeMonth() {
+    const f = this.fmodel();
+    if (f.months <= 1) return false;
+    f.months--;
+    f.withdraw.length = f.months;
+    this.save();
+    return true;
+  },
   resetFmodel() {
     this._data.fmodel = DEFAULT_FMODEL();
+    this._data.fmodel.months = 12;
     this.save();
   },
 
@@ -438,8 +460,9 @@ const FModelCalc = {
     const k1 = this.pct(i.konvZayavkaPobeda), k2 = this.pct(i.konvPobedaKontrakt);
     const plan = this.pct(i.marzhaPlan), temp = this.pct(i.tempRosta);
     const rows = [];
+    const monthsCount = +this.fmodel().months || 12;
     let oborotka = +i.oborotka, prevChek = null, pribNak = 0, vyvNak = 0;
-    for (let m = 0; m < 12; m++) {
+    for (let m = 0; m < monthsCount; m++) {
       const zayavki = sc.chasy / i.chasyNaZayavku;
       const kontrVremya = zayavki * k1 * k2 * i.rabDney;
       const chek = Math.min(oborotka / 5, m === 0 ? sc.chekStart : prevChek * (1 + temp));
